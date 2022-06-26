@@ -1,6 +1,7 @@
 package io.kevs.station.impl
 
 import io.kevs.annotation.InternalKevsApi
+import io.kevs.event.metadata.EventMetadata
 import io.kevs.station.EventDispatcher
 import io.kevs.station.EventCollector
 
@@ -10,7 +11,7 @@ import io.kevs.station.EventCollector
 class NoopEventStation : EventDispatcher, EventCollector {
 
     @InternalKevsApi
-    override fun defineCallback(callback: suspend (event: Any) -> Unit) {
+    override fun defineCallback(callback: suspend (metadata: EventMetadata, event: Any) -> Unit) {
         TODO("Not yet implemented")
     }
 

@@ -4,16 +4,14 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 import com.rabbitmq.client.ConnectionFactory
 import io.kevs.annotation.Event
 import io.kevs.event.serialization.EventSerializerStub
-import io.kevs.station.EventCollector
-import io.kevs.station.impl.SerializerEventStation
 import io.kevs.stream.addEventListener
 import io.kevs.stream.impl.CoroutineEventReceiveStream
 import io.kevs.stream.impl.DefaultEventTransmitStream
-import io.kevs.stream.impl.RunOnExecutorEventReceiveStream
 import io.kevs.stream.impl.sendEventBlocking
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.plus
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.testcontainers.containers.GenericContainer
@@ -22,7 +20,6 @@ import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.utility.DockerImageName
 import java.lang.IllegalArgumentException
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import kotlin.test.Test
 
@@ -55,18 +52,17 @@ class RabbitMqIntegrationTest {
         channel.exchangeDeclare(EXCHANGE_NAME, "topic")
         channel.queueDeclare(QUEUE_NAME, false, true, true, null)
 
+        val coroutineScope = CoroutineScope(Executors.newSingleThreadExecutor().asCoroutineDispatcher()) + SupervisorJob()
         val serializer = EventSerializerStub.kotlinxSerializationSimple(TestEvent.serializer())
         val tx = DefaultEventTransmitStream.builder()
                 .addDispatcher(RabbitMqExchangeEventDispatcher(serializer, channel) {
-                    RabbitMqEventPublishingSpecification("", QUEUE_NAME, null)
+                    RabbitMqEventPublishingSpecification("", QUEUE_NAME, false, null)
                 })
                 .build()
         val rx = CoroutineEventReceiveStream.builder()
                 //.executor(Executors.newCachedThreadPool(ThreadFactoryBuilder().setNameFormat("listeners-%d").build()))
                 .coroutineScope(CoroutineScope(Executors.newFixedThreadPool(10, ThreadFactoryBuilder().setNameFormat("listeners-coroutines-%d").build()).asCoroutineDispatcher() + SupervisorJob()))
-                .addCollector(RabbitMqQueueEventCollector(
-                    serializer, connection, QUEUE_NAME, Executors.newSingleThreadExecutor())
-                )
+                .addCollector(RabbitMqQueueEventCollector(QUEUE_NAME, serializer, channel, coroutineScope))
                 .build()
 
         rx.addEventListener<TestEvent> {
@@ -75,7 +71,7 @@ class RabbitMqIntegrationTest {
         }
         repeat(10000) { tx.sendEventBlocking(event) }
 
-        Thread.sleep(600_000)
+        //Thread.sleep(600_000)
     }
 
     companion object {

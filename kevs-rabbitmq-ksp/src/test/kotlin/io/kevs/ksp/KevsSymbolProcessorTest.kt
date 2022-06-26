@@ -1,7 +1,6 @@
 package io.kevs.ksp
 
 import com.tschuchort.compiletesting.KotlinCompilation
-import com.tschuchort.compiletesting.PluginOption
 import com.tschuchort.compiletesting.SourceFile
 import com.tschuchort.compiletesting.kspArgs
 import com.tschuchort.compiletesting.kspIncremental
@@ -12,22 +11,21 @@ import io.kevs.rabbitmq.ksp.KevsProcessorProvider
 import io.kevs.station.EventCollector
 import io.kevs.station.EventDispatcher
 import io.kevs.station.impl.SerializerEventStation
-import io.kevs.stream.addEventListener
 import io.kevs.stream.impl.DefaultEventReceiveStream
 import io.kevs.stream.impl.DefaultEventTransmitStream
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
-import org.jetbrains.kotlin.cli.js.loadPluginsForTests
-import java.io.File
 import kotlin.test.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class KevsSymbolProcessorTest {
 
+    // TODO: This whole test class makes no sense! Needs to be repurposed...
+
     @Test
     fun `it should generate event serializer class`() = runTest {
-        val sourceFile = """
+        val eventSourceFile = """
             package io.kevs.ksp
             
             import io.kevs.annotation.Event
@@ -38,18 +36,60 @@ class KevsSymbolProcessorTest {
             @Serializable
             @SerialName("test.event")
             class TestEvent(val someData: String)
-    """.trimIndent()
+        """.trimIndent()
 
-        val source = SourceFile.kotlin("TestEvent.kt", sourceFile)
+        val eventSubscriberSourceFile = """
+            package io.kevs.ksp
+            
+            import io.kevs.station.rabbitmq.annotation.SubscribeTo
+            import io.kevs.station.rabbitmq.subscriber.EventSubscriber
+            
+            @SubscribeTo(TestEvent::class)
+            class DoSomethingOnTestEventSubscriber : EventSubscriber<TestEvent> {
+                override suspend fun invoke(event: TestEvent) {
+                    println("Hey")
+                }
+            }
+        """.trimIndent()
+
+        /*val idealEventSubscriberSourceFile = """
+            package io.kevs.ksp
+            
+            @Singleton
+            @CoroutinesEventSubscriber(OtherSomethingDone::class)
+            class DoSomethingOnOtherSomethingDoneEventSubscriber(
+                @Named("exchange") private val exchangePublishTransmitStream: EventTransmitStream, 
+            ) {
+                override suspend fun invoke(event: OtherSomethingDone) {
+                    // Do something with the event & publish another event
+                    exchangePublishTransmitStream.publish(SomethingHasBeenDoneEvent())
+                }
+            }
+        """.trimIndent()*/
+
+        val kspArguments = mutableMapOf(
+            "serialization.kotlinx" to "true",
+            "io.kevs.serialization.kotlinx.create-serializer" to "true",
+            "io.kevs.rabbitmq.event-subscribers.create" to "true",
+            "io.kevs.rabbitmq.event-collectors.create" to "true",
+            "io.kevs.rabbitmq.spring.create-configuration-bean" to "true",
+            "io.kevs.rabbitmq.spring.configuration-bean-package" to "eos.connectivity.backend.v2.application.configuration",
+            "io.kevs.rabbitmq.spring.configuration-bean-class" to "EventSubscribersConfiguration",
+        )
+
+        val sourceFiles = listOf(
+            SourceFile.kotlin("TestEvent.kt", eventSourceFile),
+            SourceFile.kotlin("DoSomethingOnTestEventSubscriber.kt", eventSubscriberSourceFile),
+        )
         val compilationPass1 = KotlinCompilation().apply {
-            sources = listOf(source)
+            sources = sourceFiles
             // TODO: Auto download from https://mvnrepository.com/artifact/org.jetbrains.kotlin/kotlin-serialization/1.6.21
             kotlincArguments = listOf("-Xplugin=$KotlinxSerializationPluginJarPath")
             inheritClassPath = true
             symbolProcessorProviders = listOf(KevsProcessorProvider())
             messageOutputStream = System.out
             kspIncremental = true
-            kspArgs = mutableMapOf("serialization.kotlinx" to "true")
+            kspArgs = kspArguments
         }
 
         val result = compilationPass1.compile()
@@ -58,27 +98,15 @@ class KevsSymbolProcessorTest {
             kotlincArguments = listOf("-Xplugin=$KotlinxSerializationPluginJarPath")
             sources = compilationPass1.sources + compilationPass1.kspGeneratedSourceFiles
             inheritClassPath = true
-            kspArgs = mutableMapOf("serialization.kotlinx" to "true")
+            kspArgs = kspArguments
         }.compile()
 
         println(result.classLoader)
-        val serializerClass = compilationPass2.classLoader.loadClass("io.kevs.event.serialization.KotlinxSerializationEventSerializer")
-        val serializer = serializerClass.constructors.first().newInstance(Json) as EventSerializer
+        val serializerClass =
+            compilationPass2.classLoader.loadClass("eos.connectivity.backend.v2.application.configuration.EosKevsRabbitMqConfiguration")
+        val clazz = serializerClass.constructors.first().newInstance()
 
-        val eventClass = compilationPass2.classLoader.loadClass("io.kevs.ksp.TestEvent")
-        val event = eventClass.constructors.first().newInstance("some data")
-        val dummyStation = SerializerEventStation.Companion.builder()
-                .serializer(serializer)
-                .build()
-        val tx = DefaultEventTransmitStream.Companion.builder()
-                .addDispatcher(dummyStation as EventDispatcher)
-                .build()
-        val rx = DefaultEventReceiveStream.Companion.builder()
-                .addCollector(dummyStation as EventCollector)
-                .build()
-
-        rx.addEventListener(eventClass.kotlin) { println(it) }
-        tx.sendEvent(event)
+        println(clazz)
 
     }
 }

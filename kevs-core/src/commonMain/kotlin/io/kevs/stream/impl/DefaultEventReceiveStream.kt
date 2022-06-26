@@ -2,6 +2,7 @@ package io.kevs.stream.impl
 
 import io.kevs.annotation.InternalKevsApi
 import io.kevs.event.listener.EventListener
+import io.kevs.event.metadata.EventMetadata
 import io.kevs.station.EventCollector
 import io.kevs.stream.EventReceiveStream
 import kotlin.reflect.KClass
@@ -20,15 +21,15 @@ open class DefaultEventReceiveStream private constructor(
     }
 
     override fun <T : Any> addEventListener(eventClass: KClass<T>, listener: EventListener<T>) {
-        listeners.getOrPut(eventClass) { mutableListOf() }.add(listener::invoke as (Any) -> Unit)
+        listeners.getOrPut(eventClass) { mutableListOf() }.add(listener as EventListener<Any>)
     }
 
     @InternalKevsApi
-    override suspend fun <T : Any> eventReceived(event: T) {
+    override suspend fun <T : Any> eventReceived(metadata: EventMetadata, event: T) {
         listeners
                 .filter { it.key == event::class }
                 .flatMap { it.value }
-                .onEach { it.invoke(event) }
+                .onEach { executeListener(metadata, event, it) }
     }
 
     companion object {

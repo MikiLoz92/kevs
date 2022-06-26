@@ -48,7 +48,10 @@ class KevsSymbolProcessorTest {
             symbolProcessorProviders = listOf(KevsProcessorProvider())
             messageOutputStream = System.out
             kspIncremental = true
-            kspArgs = mutableMapOf("serialization.kotlinx" to "true")
+            kspArgs = mutableMapOf(
+                "serialization.kotlinx" to "true",
+                "io.kevs.serialization.kotlinx.create-serializer" to "true"
+            )
         }
 
         val result = compilationPass1.compile()
@@ -57,7 +60,10 @@ class KevsSymbolProcessorTest {
             kotlincArguments = listOf("-Xplugin=$KotlinxSerializationPluginJarPath")
             sources = compilationPass1.sources + compilationPass1.kspGeneratedSourceFiles
             inheritClassPath = true
-            kspArgs = mutableMapOf("serialization.kotlinx" to "true")
+            kspArgs = mutableMapOf(
+                "serialization.kotlinx" to "true",
+                "io.kevs.serialization.kotlinx.create-serializer" to "true"
+            )
         }.compile()
 
         println(result.classLoader)

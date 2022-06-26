@@ -1,6 +1,7 @@
 package io.kevs.stream.impl
 
 import io.kevs.annotation.InternalKevsApi
+import io.kevs.event.metadata.EventMetadata
 import io.kevs.stream.EventReceiveStream
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withContext
@@ -18,12 +19,12 @@ open class CoroutineEventReceiveStream private constructor(
     }
 
     @OptIn(InternalKevsApi::class)
-    override suspend fun <T : Any> eventReceived(event: T) {
+    override suspend fun <T : Any> eventReceived(metadata: EventMetadata, event: T) {
         defaultEventReceiveStream.listeners
                 .filter { it.key == event::class }
                 .flatMap { it.value }
                 .onEach {
-                    withContext(coroutineScope.coroutineContext) { it.invoke(event) }
+                    withContext(coroutineScope.coroutineContext) { executeListener(metadata, event, it) }
                 }
     }
 

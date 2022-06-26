@@ -12,8 +12,8 @@ interface EventTransmitStream : EventStream {
     //fun sendEventBlocking(event: Any)
 
     /**
-     * Sends an event. This function blocks until all registered [EventDispatcher]s to confirm that the event has been
-     * sent.
+     * Sends an event. This function suspends until all registered [EventDispatcher]s confirm that the event has been
+     * dispatched.
      */
     suspend fun sendEvent(event: Any)
 

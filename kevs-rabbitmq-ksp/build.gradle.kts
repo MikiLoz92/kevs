@@ -36,6 +36,8 @@ dependencies {
     implementation("com.squareup:kotlinpoet:1.10.2")
     implementation("com.squareup:kotlinpoet-ksp:1.10.2")
     implementation(project(":kevs-core"))
+    implementation(project(":kevs-ksp"))
+    implementation(project(":kevs-rabbitmq"))
 
     testImplementation(kotlin("test"))
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:$kotlinCoroutinesVersion")
